@@ -1,0 +1,46 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createTeamsRouter = createTeamsRouter;
+const express_1 = require("express");
+const invitations_controller_1 = require("../controllers/invitations.controller");
+const posts_controller_1 = require("../controllers/posts.controller");
+const team_events_controller_1 = require("../controllers/team-events.controller");
+const teams_controller_1 = require("../controllers/teams.controller");
+const transfers_controller_1 = require("../controllers/transfers.controller");
+const authenticate_1 = require("../middleware/authenticate");
+const requireRole_1 = require("../middleware/requireRole");
+const requireTeamMember_1 = require("../middleware/requireTeamMember");
+function createTeamsRouter(env) {
+    const r = (0, express_1.Router)();
+    const auth = (0, authenticate_1.authenticateMiddleware)(env);
+    r.post('/', auth, teams_controller_1.teamsController.create);
+    const byTeam = (0, express_1.Router)({ mergeParams: true });
+    const teamEvents = (0, express_1.Router)({ mergeParams: true });
+    teamEvents.post('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), team_events_controller_1.teamEventsController.create);
+    teamEvents.get('/', auth, requireTeamMember_1.requireTeamMember, team_events_controller_1.teamEventsController.list);
+    teamEvents.get('/:eventId', auth, requireTeamMember_1.requireTeamMember, team_events_controller_1.teamEventsController.getById);
+    teamEvents.patch('/:eventId', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), team_events_controller_1.teamEventsController.patch);
+    byTeam.use('/events', teamEvents);
+    byTeam.get('/', auth, requireTeamMember_1.requireTeamMember, teams_controller_1.teamsController.getById);
+    byTeam.get('/members', auth, requireTeamMember_1.requireTeamMember, teams_controller_1.teamsController.listMembers);
+    byTeam.delete('/members/:memberId', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), teams_controller_1.teamsController.removeMember);
+    byTeam.patch('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), teams_controller_1.teamsController.patch);
+    byTeam.post('/invitations', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), invitations_controller_1.invitationsController.createForTeam);
+    const posts = (0, express_1.Router)({ mergeParams: true });
+    posts.post('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator', 'coach']), posts_controller_1.postsController.create);
+    posts.get('/', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.list);
+    posts.get('/:postId', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.getById);
+    posts.post('/:postId/acknowledge', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.acknowledge);
+    posts.post('/:postId/nudge', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator', 'coach']), posts_controller_1.postsController.nudge);
+    posts.delete('/:postId', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.delete);
+    byTeam.use('/posts', posts);
+    const transfers = (0, express_1.Router)({ mergeParams: true });
+    transfers.get('/', auth, requireTeamMember_1.requireTeamMember, transfers_controller_1.transfersController.listPending);
+    transfers.post('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), transfers_controller_1.transfersController.create);
+    transfers.get('/:transferId', auth, requireTeamMember_1.requireTeamMember, transfers_controller_1.transfersController.getById);
+    transfers.patch('/:transferId', auth, requireTeamMember_1.requireTeamMember, transfers_controller_1.transfersController.respond);
+    byTeam.use('/transfers', transfers);
+    r.use('/:teamId', byTeam);
+    return r;
+}
+//# sourceMappingURL=teams.routes.js.map
