@@ -25,7 +25,7 @@ async function loadTeamName(teamId) {
 async function resolveRecipientMemberIds(teamId, recipientGroup) {
     if (recipientGroup === 'fullTeam') {
         const rows = await prisma_1.prisma.teamMember.findMany({
-            where: { teamId, removedAt: null, onboardingState: 'active' },
+            where: { teamId, removedAt: null },
             select: { id: true },
         });
         return rows.map((r) => r.id);
@@ -104,9 +104,13 @@ async function createPost(teamId, creatorMemberId, input) {
         return { postId: post.id };
     }
     const recipientIds = await resolveRecipientMemberIds(teamId, input.recipientGroup);
-    if (recipientIds.length > 0) {
+    // Ensure author sees their own published post in feed, even if recipient filters are restrictive.
+    const recipientSet = new Set(recipientIds);
+    recipientSet.add(creatorMemberId);
+    const resolvedRecipientIds = Array.from(recipientSet);
+    if (resolvedRecipientIds.length > 0) {
         await prisma_1.prisma.postDeliveryState.createMany({
-            data: recipientIds.map((teamMemberId) => ({
+            data: resolvedRecipientIds.map((teamMemberId) => ({
                 postId: post.id,
                 teamMemberId,
             })),
@@ -115,7 +119,7 @@ async function createPost(teamId, creatorMemberId, input) {
     }
     // Dispatch notification to recipients (copy from docs/engineering/notifications-and-alerts.md)
     const recipients = await prisma_1.prisma.teamMember.findMany({
-        where: { id: { in: recipientIds } },
+        where: { id: { in: resolvedRecipientIds } },
         include: { user: { select: { pushToken: true, name: true } } },
     });
     const tokens = recipients
