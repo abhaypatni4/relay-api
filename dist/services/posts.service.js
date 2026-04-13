@@ -156,13 +156,16 @@ async function createPost(teamId, creatorMemberId, input) {
     const resolvedRecipientIds = Array.from(recipientSet);
     console.log('[posts] resolved recipients count:', resolvedRecipientIds.length);
     if (resolvedRecipientIds.length > 0) {
+        const now = new Date();
         await prisma_1.prisma.postDeliveryState.createMany({
             data: resolvedRecipientIds.map((teamMemberId) => ({
                 postId: post.id,
                 teamMemberId,
-                deliveryState: 'notSeen',
-                seenAt: null,
-                acknowledgedAt: null,
+                deliveryState: teamMemberId === creatorMemberId
+                    ? (requiresAcknowledgment ? 'acknowledged' : 'seen')
+                    : 'notSeen',
+                seenAt: teamMemberId === creatorMemberId ? now : null,
+                acknowledgedAt: teamMemberId === creatorMemberId && requiresAcknowledgment ? now : null,
             })),
             skipDuplicates: true,
         });
