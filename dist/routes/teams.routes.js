@@ -27,7 +27,7 @@ function createTeamsRouter(env) {
     byTeam.patch('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), teams_controller_1.teamsController.patch);
     byTeam.post('/invitations', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator']), invitations_controller_1.invitationsController.createForTeam);
     const posts = (0, express_1.Router)({ mergeParams: true });
-    posts.post('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator', 'coach']), posts_controller_1.postsController.create);
+    posts.post('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator', 'coach', 'staff']), posts_controller_1.postsController.create);
     posts.get('/', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.list);
     posts.get('/:postId', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.getById);
     posts.post('/:postId/seen', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.seen);

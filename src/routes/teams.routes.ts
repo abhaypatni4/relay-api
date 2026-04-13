@@ -42,7 +42,7 @@ export function createTeamsRouter(env: Env): Router {
   );
 
   const posts = Router({ mergeParams: true });
-  posts.post('/', auth, requireTeamMember, requireRole(['coordinator', 'coach']), postsController.create);
+  posts.post('/', auth, requireTeamMember, requireRole(['coordinator', 'coach', 'staff']), postsController.create);
   posts.get('/', auth, requireTeamMember, postsController.list);
   posts.get('/:postId', auth, requireTeamMember, postsController.getById);
   posts.post('/:postId/seen', auth, requireTeamMember, postsController.seen);

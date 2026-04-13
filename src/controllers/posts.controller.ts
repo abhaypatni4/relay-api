@@ -35,8 +35,20 @@ export const postsController = {
       return;
     }
     const role = req.member.role;
-    if (!(role === 'coordinator' || role === 'coach')) {
-      res.status(403).json({ error: 'Forbidden' });
+    if (role === 'player') {
+      res.status(403).json({ error: 'Players cannot create posts' });
+      return;
+    }
+    if (role === 'coach' && parsed.data.type === 'urgentAlert') {
+      res.status(403).json({ error: 'Coaches cannot create urgent alerts' });
+      return;
+    }
+    if (role === 'staff' && parsed.data.type === 'urgentAlert') {
+      res.status(403).json({ error: 'Staff cannot create urgent alerts' });
+      return;
+    }
+    if (role === 'staff' && parsed.data.type === 'scheduleUpdate') {
+      res.status(403).json({ error: 'Staff cannot create schedule updates' });
       return;
     }
     try {
