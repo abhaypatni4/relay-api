@@ -23,7 +23,8 @@ export async function createTeamEvent(
   createdByMemberId: string,
   input: CreateEventInput,
 ): Promise<{ eventId: string; tripWorkspaceId: string | null }> {
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
+    const autoActive = input.type === 'match' || input.type === 'training';
     const event = await tx.event.create({
       data: {
         teamId,
@@ -32,7 +33,7 @@ export async function createTeamEvent(
         date: input.date,
         startTime: input.startTime.trim(),
         location: input.location?.trim() ?? null,
-        status: 'draft',
+        status: autoActive ? 'active' : 'draft',
         createdBy: createdByMemberId,
       },
     });
@@ -57,8 +58,65 @@ export async function createTeamEvent(
       return { eventId: event.id, tripWorkspaceId: tw.id };
     }
 
+    if (input.type === 'match' || input.type === 'training') {
+      const players = await tx.teamMember.findMany({
+        where: {
+          teamId,
+          role: 'player',
+          removedAt: null,
+        },
+        select: { id: true },
+      });
+      const window = await tx.availabilityWindow.create({
+        data: {
+          eventId: event.id,
+          openedBy: createdByMemberId,
+          isLocked: false,
+          openedAt: new Date(),
+        },
+      });
+      if (players.length > 0) {
+        await tx.availabilitySubmission.createMany({
+          data: players.map((p) => ({
+            availabilityWindowId: window.id,
+            teamMemberId: p.id,
+            availabilityStatus: null,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
     return { eventId: event.id, tripWorkspaceId: null };
   });
+
+  if (input.type === 'match' || input.type === 'training') {
+    const recipients = await prisma.teamMember.findMany({
+      where: {
+        teamId,
+        removedAt: null,
+        onboardingState: 'active',
+      },
+      include: { user: { select: { pushToken: true } } },
+    });
+    const tokens = recipients
+      .map((r) => r.user.pushToken)
+      .filter((t): t is string => Boolean(t && t.length > 0));
+    if (tokens.length > 0) {
+      const eventKind = input.type === 'match' ? 'Match' : 'Training';
+      const dateLabel = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(input.date);
+      await sendToMultiple(tokens, {
+        title: `New ${eventKind} scheduled`,
+        body: `${input.name.trim()} on ${dateLabel}`,
+        data: {
+          deepLink: `relay://events/${created.eventId}`,
+          type: 'EVENT_SCHEDULED',
+        },
+      });
+    }
+  }
+
+  return created;
 }
 
 export async function listTeamEventsChronological(teamId: string) {
