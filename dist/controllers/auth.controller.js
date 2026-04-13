@@ -26,12 +26,13 @@ const refreshBody = zod_1.z.object({
 function createAuthController(env) {
     return {
         register: async (req, res) => {
-            const parsed = registerBody.safeParse(req.body);
-            if (!parsed.success) {
-                res.status(400).json({ error: 'Invalid body' });
-                return;
-            }
+            console.log('[register] hit', req.body);
             try {
+                const parsed = registerBody.safeParse(req.body);
+                if (!parsed.success) {
+                    res.status(400).json({ error: 'Invalid body' });
+                    return;
+                }
                 const { invitationToken: _t, ...registerInput } = parsed.data;
                 void _t;
                 const { user, tokens } = await (0, auth_service_1.registerUser)(env, registerInput);
@@ -43,6 +44,9 @@ function createAuthController(env) {
                 });
             }
             catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                const stack = e instanceof Error ? e.stack : undefined;
+                console.log('[register] error', message, stack);
                 if (e instanceof client_1.Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
                     const target = e.meta?.target?.join(',') ?? '';
                     if (target.includes('email')) {
@@ -56,8 +60,11 @@ function createAuthController(env) {
                     res.status(409).json({ error: 'Email or phone already registered' });
                     return;
                 }
-                const msg = e instanceof Error ? e.message : 'Error';
-                res.status(400).json({ error: msg });
+                if (env.NODE_ENV === 'development') {
+                    res.status(400).json({ error: message });
+                    return;
+                }
+                res.status(400).json({ error: 'Registration failed' });
             }
         },
         login: async (req, res) => {

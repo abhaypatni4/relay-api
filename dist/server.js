@@ -37,6 +37,7 @@ const Sentry = __importStar(require("@sentry/node"));
 const app_1 = require("./app");
 const env_1 = require("./config/env");
 const jobs_1 = require("./jobs");
+const prisma_1 = require("./db/prisma");
 const notification_service_1 = require("./services/notification.service");
 const env = (0, env_1.getEnv)();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,23 @@ if (env.SENTRY_DSN) {
 }
 (0, jobs_1.startJobInfrastructure)(env);
 const app = (0, app_1.createApp)(env);
+void prisma_1.prisma
+    .$connect()
+    .then(() => console.log('[DB] Connected successfully'))
+    .catch((e) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.log('[DB] Connection failed', message);
+});
+void prisma_1.prisma.user
+    .count()
+    .then((count) => console.log('[DB] User table exists, count:', count))
+    .catch((e) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.log('[DB] User table missing or error:', message);
+});
+if (!process.env.DATABASE_URL?.includes('sslmode=require')) {
+    console.log('[DB] Warning: DATABASE_URL is missing sslmode=require (required for Neon)');
+}
 const server = app.listen(PORT, () => {
     console.log(`relay-api listening on port ${String(PORT)}`);
     void (0, jobs_1.enqueueTestJob)().catch((err) => {

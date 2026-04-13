@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/node';
 import { createApp } from './app';
 import { getEnv } from './config/env';
 import { enqueueTestJob, startJobInfrastructure, stopJobInfrastructure } from './jobs';
+import { prisma } from './db/prisma';
 import { initFirebaseIfConfigured } from './services/notification.service';
 
 const env = getEnv();
@@ -21,6 +22,26 @@ if (env.SENTRY_DSN) {
 startJobInfrastructure(env);
 
 const app = createApp(env);
+
+void prisma
+  .$connect()
+  .then(() => console.log('[DB] Connected successfully'))
+  .catch((e: unknown) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.log('[DB] Connection failed', message);
+  });
+
+void prisma.user
+  .count()
+  .then((count) => console.log('[DB] User table exists, count:', count))
+  .catch((e: unknown) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.log('[DB] User table missing or error:', message);
+  });
+
+if (!process.env.DATABASE_URL?.includes('sslmode=require')) {
+  console.log('[DB] Warning: DATABASE_URL is missing sslmode=require (required for Neon)');
+}
 
 const server = app.listen(PORT, () => {
   console.log(`relay-api listening on port ${String(PORT)}`);
