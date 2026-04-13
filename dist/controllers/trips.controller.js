@@ -233,6 +233,7 @@ exports.tripsController = {
     publish: async (req, res) => {
         const eventId = req.params.eventId;
         const eid = Array.isArray(eventId) ? eventId[0] : eventId;
+        console.log('[publish] called for eventId:', eid);
         if (!eid || !req.eventRow) {
             res.status(400).json({ error: 'eventId required' });
             return;
@@ -243,6 +244,7 @@ exports.tripsController = {
         }
         try {
             const out = await (0, trip_service_1.publishTrip)(eid);
+            console.log('[publish] result:', out);
             res.status(200).json({
                 tripWorkspaceId: out.tripWorkspaceId,
                 published: true,

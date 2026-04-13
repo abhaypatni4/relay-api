@@ -283,12 +283,20 @@ export async function publishTrip(
     throw new Error('PUBLISH_VALIDATION');
   }
 
-  await prisma.tripWorkspace.update({
-    where: { eventId },
-    data: {
-      isPublished: true,
-      publishedAt: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.tripWorkspace.update({
+      where: { eventId },
+      data: {
+        isPublished: true,
+        publishedAt: new Date(),
+      },
+    });
+    await tx.event.update({
+      where: { id: eventId },
+      data: {
+        status: 'active',
+      },
+    });
   });
 
   const traveling = await prisma.tripSquadAssignment.findMany({
