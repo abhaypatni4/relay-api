@@ -17,15 +17,30 @@ function serializePost(row) {
         createdByName: row.createdByName,
         createdAt: row.createdAt.toISOString(),
         deletedAt: row.deletedAt?.toISOString() ?? null,
-        currentUserDeliveryState: row.currentUserDeliveryState,
+        currentUserDeliveryState: {
+            state: row.currentUserDeliveryState.state,
+            seenAt: row.currentUserDeliveryState.seenAt?.toISOString() ?? null,
+            acknowledgedAt: row.currentUserDeliveryState.acknowledgedAt?.toISOString() ?? null,
+        },
+        currentUserSeenAt: row.currentUserSeenAt?.toISOString() ?? null,
         currentUserAcknowledgedAt: row.currentUserAcknowledgedAt?.toISOString() ?? null,
     };
     if (row.deliverySummary) {
         o.deliverySummary = {
+            total: row.deliverySummary.total,
+            notSeen: row.deliverySummary.notSeen,
+            seen: row.deliverySummary.seen,
+            acknowledged: row.deliverySummary.acknowledged,
             sentCount: row.deliverySummary.sentCount,
             seenCount: row.deliverySummary.seenCount,
             acknowledgedCount: row.deliverySummary.acknowledgedCount,
             overdueCount: row.deliverySummary.overdueCount,
+            members: row.deliverySummary.members?.map((m) => ({
+                memberId: m.memberId,
+                memberName: m.memberName,
+                state: m.state,
+                seenAt: m.seenAt?.toISOString() ?? null,
+            })),
             overdueMembers: row.deliverySummary.overdueMembers?.map((m) => ({
                 teamMemberId: m.teamMemberId,
                 memberName: m.memberName,

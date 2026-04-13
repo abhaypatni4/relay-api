@@ -8,13 +8,14 @@ import {
   deletePost,
   getPostForMember,
   listPostsForMember,
+  markPostSeen,
   sendNudge,
 } from '../services/posts.service';
 
 const createBody = z.object({
   type: z.enum(['scheduleUpdate', 'travelInfo', 'generalAnnouncement', 'urgentAlert']),
   content: z.string().max(500),
-  recipientGroup: z.enum(['fullTeam', 'travelingSquad', 'coachingStaff', 'allStaff']),
+  recipientGroup: z.enum(['fullTeam', 'travelingSquad', 'players', 'coaches', 'staff', 'coachingStaff', 'allStaff']),
   eventId: z.string().optional().nullable(),
   isUrgent: z.boolean().optional(),
   isDraft: z.boolean().optional().default(false),
@@ -22,6 +23,8 @@ const createBody = z.object({
 
 export const postsController = {
   create: async (req: Request, res: Response): Promise<void> => {
+    console.log('[posts controller] req.member:', req.member);
+    console.log('[posts controller] teamId param:', req.params.teamId);
     if (!req.member) {
       res.status(500).json({ error: 'Missing context' });
       return;
@@ -45,11 +48,11 @@ export const postsController = {
         isUrgent: parsed.data.isUrgent,
         isDraft: parsed.data.isDraft,
       });
-      res.status(201).json({ postId: out.postId });
+      res.status(201).json({ postId: out.postId, recipientCount: out.recipientCount });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'UNKNOWN';
       if (msg === 'NO_ACTIVE_TRIP') {
-        res.status(400).json({ error: 'No active trip exists for Traveling Squad posts' });
+        res.status(400).json({ error: 'No active trip found for traveling squad targeting' });
         return;
       }
       if (msg === 'INVALID_CONTENT') {
@@ -58,6 +61,29 @@ export const postsController = {
       }
       res.status(500).json({ error: 'Failed to create post' });
     }
+  },
+
+  seen: async (req: Request, res: Response): Promise<void> => {
+    if (!req.member) {
+      res.status(500).json({ error: 'Missing context' });
+      return;
+    }
+    const raw = req.params.postId;
+    const postId = Array.isArray(raw) ? raw[0] : raw;
+    if (!postId) {
+      res.status(400).json({ error: 'postId required' });
+      return;
+    }
+    const out = await markPostSeen(req.member.teamId, postId, req.member.id);
+    if (out.kind === 'not_found') {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (out.kind === 'forbidden') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    res.status(200).json({ ok: true });
   },
 
   list: async (req: Request, res: Response): Promise<void> => {

@@ -45,6 +45,7 @@ export function createTeamsRouter(env: Env): Router {
   posts.post('/', auth, requireTeamMember, requireRole(['coordinator', 'coach']), postsController.create);
   posts.get('/', auth, requireTeamMember, postsController.list);
   posts.get('/:postId', auth, requireTeamMember, postsController.getById);
+  posts.post('/:postId/seen', auth, requireTeamMember, postsController.seen);
   posts.post('/:postId/acknowledge', auth, requireTeamMember, postsController.acknowledge);
   posts.post('/:postId/nudge', auth, requireTeamMember, requireRole(['coordinator', 'coach']), postsController.nudge);
   posts.delete('/:postId', auth, requireTeamMember, postsController.delete);

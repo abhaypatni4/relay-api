@@ -341,6 +341,9 @@ enum PostType {
 enum RecipientGroup {
   fullTeam
   travelingSquad
+  players
+  coaches
+  staff
   coachingStaff
   allStaff
 }

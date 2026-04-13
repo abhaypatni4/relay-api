@@ -19,39 +19,85 @@ async function loadTeamName(teamId: string): Promise<string> {
   return team?.name ?? 'Relay';
 }
 
-async function resolveRecipientMemberIds(teamId: string, recipientGroup: RecipientGroup): Promise<string[]> {
+interface RecipientResolution {
+  recipientMemberIds: string[];
+  noActiveTrip: boolean;
+}
+
+async function resolveRecipientMemberIds(teamId: string, recipientGroup: RecipientGroup): Promise<RecipientResolution> {
+  console.log('[posts] recipientGroup:', recipientGroup);
   if (recipientGroup === 'fullTeam') {
-    const rows = await prisma.teamMember.findMany({
+    const members = await prisma.teamMember.findMany({
       where: { teamId, removedAt: null },
       select: { id: true },
     });
-    return rows.map((r) => r.id);
+    console.log('[posts] members query result count:', members.length);
+    return { recipientMemberIds: members.map((r) => r.id), noActiveTrip: false };
   }
 
-  if (recipientGroup === 'coachingStaff') {
-    const rows = await prisma.teamMember.findMany({
+  if (recipientGroup === 'players') {
+    const members = await prisma.teamMember.findMany({
       where: {
         teamId,
         removedAt: null,
-        onboardingState: 'active',
-        role: { in: ['coach', 'coordinator'] },
+        role: 'player',
       },
       select: { id: true },
     });
-    return rows.map((r) => r.id);
+    console.log('[posts] members query result count:', members.length);
+    return { recipientMemberIds: members.map((r) => r.id), noActiveTrip: false };
   }
 
-  if (recipientGroup === 'allStaff') {
-    const rows = await prisma.teamMember.findMany({
+  if (recipientGroup === 'coaches') {
+    const members = await prisma.teamMember.findMany({
       where: {
         teamId,
         removedAt: null,
-        onboardingState: 'active',
+        role: 'coach',
+      },
+      select: { id: true },
+    });
+    console.log('[posts] members query result count:', members.length);
+    return { recipientMemberIds: members.map((r) => r.id), noActiveTrip: false };
+  }
+
+  if (recipientGroup === 'staff') {
+    const members = await prisma.teamMember.findMany({
+      where: {
+        teamId,
+        removedAt: null,
+        role: 'staff',
+      },
+      select: { id: true },
+    });
+    console.log('[posts] members query result count:', members.length);
+    return { recipientMemberIds: members.map((r) => r.id), noActiveTrip: false };
+  }
+
+  if (recipientGroup === 'coachingStaff') {
+    const members = await prisma.teamMember.findMany({
+      where: {
+        teamId,
+        removedAt: null,
+        role: { in: ['coach', 'staff'] },
+      },
+      select: { id: true },
+    });
+    console.log('[posts] members query result count:', members.length);
+    return { recipientMemberIds: members.map((r) => r.id), noActiveTrip: false };
+  }
+
+  if (recipientGroup === 'allStaff') {
+    const members = await prisma.teamMember.findMany({
+      where: {
+        teamId,
+        removedAt: null,
         role: { in: ['staff', 'coordinator'] },
       },
       select: { id: true },
     });
-    return rows.map((r) => r.id);
+    console.log('[posts] members query result count:', members.length);
+    return { recipientMemberIds: members.map((r) => r.id), noActiveTrip: false };
   }
 
   // travelingSquad
@@ -67,9 +113,10 @@ async function resolveRecipientMemberIds(teamId: string, recipientGroup: Recipie
   });
   const tripWorkspaceId = activeTripEvent?.tripWorkspace?.id;
   if (!tripWorkspaceId) {
-    throw new Error('NO_ACTIVE_TRIP');
+    console.log('[posts] members query result count:', 0);
+    return { recipientMemberIds: [], noActiveTrip: true };
   }
-  const rows = await prisma.tripSquadAssignment.findMany({
+  const members = await prisma.tripSquadAssignment.findMany({
     where: {
       tripWorkspaceId,
       travelingStatus: 'traveling',
@@ -77,7 +124,8 @@ async function resolveRecipientMemberIds(teamId: string, recipientGroup: Recipie
     },
     select: { teamMemberId: true },
   });
-  return rows.map((r) => r.teamMemberId);
+  console.log('[posts] members query result count:', members.length);
+  return { recipientMemberIds: members.map((r) => r.teamMemberId), noActiveTrip: false };
 }
 
 export async function createPost(
@@ -91,7 +139,8 @@ export async function createPost(
     isUrgent?: boolean;
     isDraft?: boolean;
   },
-): Promise<{ postId: string }> {
+): Promise<{ postId: string; recipientCount: number; noActiveTrip?: boolean }> {
+  console.log('[posts] creating post for teamId:', teamId);
   const content = input.content.trim();
   if (content.length === 0 || content.length > 500) {
     throw new Error('INVALID_CONTENT');
@@ -115,19 +164,27 @@ export async function createPost(
   });
 
   if (isDraft) {
-    return { postId: post.id };
+    return { postId: post.id, recipientCount: 0 };
   }
 
-  const recipientIds = await resolveRecipientMemberIds(teamId, input.recipientGroup);
+  const resolution = await resolveRecipientMemberIds(teamId, input.recipientGroup);
+  if (resolution.noActiveTrip && input.recipientGroup === 'travelingSquad') {
+    throw new Error('NO_ACTIVE_TRIP');
+  }
+  const recipientIds = resolution.recipientMemberIds;
   // Ensure author sees their own published post in feed, even if recipient filters are restrictive.
   const recipientSet = new Set(recipientIds);
   recipientSet.add(creatorMemberId);
   const resolvedRecipientIds = Array.from(recipientSet);
+  console.log('[posts] resolved recipients count:', resolvedRecipientIds.length);
   if (resolvedRecipientIds.length > 0) {
     await prisma.postDeliveryState.createMany({
       data: resolvedRecipientIds.map((teamMemberId) => ({
         postId: post.id,
         teamMemberId,
+        deliveryState: 'notSeen',
+        seenAt: null,
+        acknowledgedAt: null,
       })),
       skipDuplicates: true,
     });
@@ -174,7 +231,7 @@ export async function createPost(
     });
   }
 
-  return { postId: post.id };
+  return { postId: post.id, recipientCount: resolvedRecipientIds.length };
 }
 
 function isRecipientGroupAllowedForRole(role: Role, group: RecipientGroup): boolean {
@@ -183,8 +240,14 @@ function isRecipientGroupAllowedForRole(role: Role, group: RecipientGroup): bool
       return true;
     case 'travelingSquad':
       return true;
-    case 'coachingStaff':
+    case 'players':
+      return role === 'player' || role === 'coach' || role === 'coordinator';
+    case 'coaches':
       return role === 'coach' || role === 'coordinator';
+    case 'staff':
+      return role === 'staff' || role === 'coordinator';
+    case 'coachingStaff':
+      return role === 'coach' || role === 'staff' || role === 'coordinator';
     case 'allStaff':
       return role === 'staff' || role === 'coordinator';
   }
@@ -211,7 +274,7 @@ export async function listPostsForMember(teamId: string, member: { id: string; r
     include: {
       deliveryStates: {
         where: { teamMemberId: member.id },
-        select: { deliveryState: true, acknowledgedAt: true },
+        select: { deliveryState: true, seenAt: true, acknowledgedAt: true },
       },
     },
   });
@@ -259,6 +322,7 @@ export async function listPostsForMember(teamId: string, member: { id: string; r
     .map((p) => {
       const current = p.deliveryStates[0];
       const state: DeliveryState = current?.deliveryState ?? 'notSeen';
+      const seenAt = current?.seenAt ?? null;
       const ackAt = current?.acknowledgedAt ?? null;
       const createdByName = creatorNameById.get(p.createdBy) ?? 'Coordinator';
 
@@ -276,7 +340,12 @@ export async function listPostsForMember(teamId: string, member: { id: string; r
         createdByName,
         createdAt: p.createdAt,
         deletedAt: p.deletedAt,
-        currentUserDeliveryState: state,
+        currentUserDeliveryState: {
+          state,
+          seenAt,
+          acknowledgedAt: ackAt,
+        },
+        currentUserSeenAt: seenAt,
         currentUserAcknowledgedAt: ackAt,
       };
 
@@ -291,6 +360,10 @@ export async function listPostsForMember(teamId: string, member: { id: string; r
       return {
         ...base,
         deliverySummary: {
+          total: c.sent,
+          notSeen: c.sent - c.seen,
+          seen: c.seen,
+          acknowledged: c.acknowledged,
           sentCount: c.sent,
           seenCount: c.seen,
           acknowledgedCount: c.acknowledged,
@@ -323,13 +396,28 @@ export async function getPostForMember(
         createdByName: string;
         createdAt: Date;
         deletedAt: Date | null;
-        currentUserDeliveryState: DeliveryState;
+        currentUserDeliveryState: {
+          state: DeliveryState;
+          seenAt: Date | null;
+          acknowledgedAt: Date | null;
+        };
+        currentUserSeenAt: Date | null;
         currentUserAcknowledgedAt: Date | null;
         deliverySummary?: {
+          total: number;
+          notSeen: number;
+          seen: number;
+          acknowledged: number;
           sentCount: number;
           seenCount: number;
           acknowledgedCount: number;
           overdueCount: number;
+          members?: {
+            memberId: string;
+            memberName: string;
+            state: DeliveryState;
+            seenAt: Date | null;
+          }[];
           overdueMembers?: {
             teamMemberId: string;
             memberName: string;
@@ -355,7 +443,7 @@ export async function getPostForMember(
   } else {
     const ds = await prisma.postDeliveryState.findUnique({
       where: { postId_teamMemberId: { postId: post.id, teamMemberId: member.id } },
-      select: { deliveryState: true },
+      select: { deliveryState: true, seenAt: true, acknowledgedAt: true },
     });
     if (!ds) {
       return { kind: 'forbidden' };
@@ -372,24 +460,17 @@ export async function getPostForMember(
   const createdByName = creator?.user.name ?? 'Coordinator';
 
   let currentUserDeliveryState: DeliveryState = 'notSeen';
+  let currentUserSeenAt: Date | null = null;
   let currentUserAcknowledgedAt: Date | null = null;
 
   if (!post.isDraft) {
     const ds = await prisma.postDeliveryState.findUnique({
       where: { postId_teamMemberId: { postId: post.id, teamMemberId: member.id } },
-      select: { deliveryState: true, acknowledgedAt: true },
+      select: { deliveryState: true, seenAt: true, acknowledgedAt: true },
     });
     currentUserDeliveryState = ds?.deliveryState ?? 'notSeen';
+    currentUserSeenAt = ds?.seenAt ?? null;
     currentUserAcknowledgedAt = ds?.acknowledgedAt ?? null;
-
-    // Mark seen if notSeen.
-    if (currentUserDeliveryState === 'notSeen') {
-      await prisma.postDeliveryState.update({
-        where: { postId_teamMemberId: { postId: post.id, teamMemberId: member.id } },
-        data: { deliveryState: 'seen', seenAt: new Date() },
-      });
-      currentUserDeliveryState = 'seen';
-    }
   }
 
   const base = {
@@ -406,7 +487,12 @@ export async function getPostForMember(
     createdByName,
     createdAt: post.createdAt,
     deletedAt: post.deletedAt,
-    currentUserDeliveryState,
+    currentUserDeliveryState: {
+      state: currentUserDeliveryState,
+      seenAt: currentUserSeenAt,
+      acknowledgedAt: currentUserAcknowledgedAt,
+    },
+    currentUserSeenAt,
     currentUserAcknowledgedAt,
   };
 
@@ -436,6 +522,11 @@ export async function getPostForMember(
   const now = new Date();
   const overdueAt = new Date(post.createdAt.getTime() + post.overdueThresholdHours * 60 * 60 * 1000);
   const isOverdue = post.requiresAcknowledgment && overdueAt <= now;
+  const memberStates = await prisma.postDeliveryState.findMany({
+    where: { postId: post.id },
+    include: { teamMember: { include: { user: { select: { name: true } } } } },
+    orderBy: { teamMember: { user: { name: 'asc' } } },
+  });
 
   let overdueMembers:
     | {
@@ -466,14 +557,48 @@ export async function getPostForMember(
     post: {
       ...base,
       deliverySummary: {
+        total: sentCount,
+        notSeen: sentCount - seenCount,
+        seen: seenCount,
+        acknowledged: acknowledgedCount,
         sentCount,
         seenCount,
         acknowledgedCount,
         overdueCount: isOverdue ? sentCount - acknowledgedCount : 0,
+        members: memberStates.map((m) => ({
+          memberId: m.teamMemberId,
+          memberName: m.teamMember.user.name,
+          state: m.deliveryState,
+          seenAt: m.seenAt,
+        })),
         overdueMembers: post.requiresAcknowledgment && isOverdue ? overdueMembers : undefined,
       },
     },
   };
+}
+
+export async function markPostSeen(
+  teamId: string,
+  postId: string,
+  memberId: string,
+): Promise<{ kind: 'not_found' } | { kind: 'forbidden' } | { kind: 'ok' }> {
+  const post = await prisma.post.findFirst({ where: { id: postId, teamId, deletedAt: null } });
+  if (!post) {
+    return { kind: 'not_found' };
+  }
+  const ds = await prisma.postDeliveryState.findUnique({
+    where: { postId_teamMemberId: { postId, teamMemberId: memberId } },
+  });
+  if (!ds) {
+    return { kind: 'not_found' };
+  }
+  if (ds.deliveryState === 'notSeen') {
+    await prisma.postDeliveryState.update({
+      where: { postId_teamMemberId: { postId, teamMemberId: memberId } },
+      data: { deliveryState: 'seen', seenAt: new Date() },
+    });
+  }
+  return { kind: 'ok' };
 }
 
 export async function acknowledgePost(

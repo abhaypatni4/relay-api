@@ -8,6 +8,8 @@ export declare function createPost(teamId: string, creatorMemberId: string, inpu
     isDraft?: boolean;
 }): Promise<{
     postId: string;
+    recipientCount: number;
+    noActiveTrip?: boolean;
 }>;
 export declare function listPostsForMember(teamId: string, member: {
     id: string;
@@ -26,10 +28,19 @@ export declare function listPostsForMember(teamId: string, member: {
     createdByName: string;
     createdAt: Date;
     deletedAt: Date | null;
-    currentUserDeliveryState: import("@prisma/client").$Enums.DeliveryState;
+    currentUserDeliveryState: {
+        state: import("@prisma/client").$Enums.DeliveryState;
+        seenAt: Date | null;
+        acknowledgedAt: Date | null;
+    };
+    currentUserSeenAt: Date | null;
     currentUserAcknowledgedAt: Date | null;
 } | {
     deliverySummary: {
+        total: number;
+        notSeen: number;
+        seen: number;
+        acknowledged: number;
         sentCount: number;
         seenCount: number;
         acknowledgedCount: number;
@@ -48,7 +59,12 @@ export declare function listPostsForMember(teamId: string, member: {
     createdByName: string;
     createdAt: Date;
     deletedAt: Date | null;
-    currentUserDeliveryState: import("@prisma/client").$Enums.DeliveryState;
+    currentUserDeliveryState: {
+        state: import("@prisma/client").$Enums.DeliveryState;
+        seenAt: Date | null;
+        acknowledgedAt: Date | null;
+    };
+    currentUserSeenAt: Date | null;
     currentUserAcknowledgedAt: Date | null;
 })[]>;
 export declare function getPostForMember(teamId: string, postId: string, member: {
@@ -74,13 +90,28 @@ export declare function getPostForMember(teamId: string, postId: string, member:
         createdByName: string;
         createdAt: Date;
         deletedAt: Date | null;
-        currentUserDeliveryState: DeliveryState;
+        currentUserDeliveryState: {
+            state: DeliveryState;
+            seenAt: Date | null;
+            acknowledgedAt: Date | null;
+        };
+        currentUserSeenAt: Date | null;
         currentUserAcknowledgedAt: Date | null;
         deliverySummary?: {
+            total: number;
+            notSeen: number;
+            seen: number;
+            acknowledged: number;
             sentCount: number;
             seenCount: number;
             acknowledgedCount: number;
             overdueCount: number;
+            members?: {
+                memberId: string;
+                memberName: string;
+                state: DeliveryState;
+                seenAt: Date | null;
+            }[];
             overdueMembers?: {
                 teamMemberId: string;
                 memberName: string;
@@ -89,6 +120,13 @@ export declare function getPostForMember(teamId: string, postId: string, member:
             }[];
         };
     };
+}>;
+export declare function markPostSeen(teamId: string, postId: string, memberId: string): Promise<{
+    kind: 'not_found';
+} | {
+    kind: 'forbidden';
+} | {
+    kind: 'ok';
 }>;
 export declare function acknowledgePost(teamId: string, postId: string, memberId: string): Promise<{
     kind: 'not_found';

@@ -30,6 +30,7 @@ function createTeamsRouter(env) {
     posts.post('/', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator', 'coach']), posts_controller_1.postsController.create);
     posts.get('/', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.list);
     posts.get('/:postId', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.getById);
+    posts.post('/:postId/seen', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.seen);
     posts.post('/:postId/acknowledge', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.acknowledge);
     posts.post('/:postId/nudge', auth, requireTeamMember_1.requireTeamMember, (0, requireRole_1.requireRole)(['coordinator', 'coach']), posts_controller_1.postsController.nudge);
     posts.delete('/:postId', auth, requireTeamMember_1.requireTeamMember, posts_controller_1.postsController.delete);
